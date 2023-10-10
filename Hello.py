@@ -1,51 +1,72 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import streamlit as st
-from streamlit.logger import get_logger
+import asyncio
+import json
 
-LOGGER = get_logger(__name__)
+from src.api import search_text_async
+from src.component import display_trademarks
+from src.constant import RegisterStatusMap, TmDivisionCodeMap
+from src.entity import Filter
+from src.env import load_env
 
 
-def run():
-    st.set_page_config(
-        page_title="Hello",
-        page_icon="👋",
-    )
+def main():
+    env = load_env()
 
-    st.write("# Welcome to Streamlit! 👋")
-
-    st.sidebar.success("Select a demo above.")
-
+    st.title("Trademark Text Search")
     st.markdown(
         """
-        Streamlit is an open-source app framework built specifically for
-        Machine Learning and Data Science projects.
-        **👈 Select a demo from the sidebar** to see some examples
-        of what Streamlit can do!
-        ### Want to learn more?
-        - Check out [streamlit.io](https://streamlit.io)
-        - Jump into our [documentation](https://docs.streamlit.io)
-        - Ask a question in our [community
-          forums](https://discuss.streamlit.io)
-        ### See more complex demos
-        - Use a neural net to [analyze the Udacity Self-driving Car Image
-          Dataset](https://github.com/streamlit/demo-self-driving)
-        - Explore a [New York City rideshare dataset](https://github.com/streamlit/demo-uber-nyc-pickups)
-    """
+        This is a demo of the Trademark Text Search API.
+        """
     )
+
+    ## input Text
+    st.header("Input Text")
+    text = st.text_input("Text", value="")
+    if text is not None:
+        ## search
+        st.header("Search")
+        k = st.number_input("k", min_value=1, max_value=100, value=32)
+
+        register_status = st.multiselect(
+            "법적 상태",
+            RegisterStatusMap.keys(),
+            default=[],
+            format_func=lambda x: RegisterStatusMap[x],
+        )
+        tm_division_code = st.multiselect(
+            "유형",
+            TmDivisionCodeMap.keys(),
+            default=[],
+            format_func=lambda x: TmDivisionCodeMap[x],
+        )
+
+        product_types = st.text_input("상품분류", value="", help="상품분류를 입력하세요 (, 로 구분)")
+        similar_group_codes = st.text_input("유사군", value="", help="유사군을 입력하세요 (, 로 구분)")
+        ## button
+        if st.button("Search"):
+            st.write("Searching...")
+            product_types = [t for t in product_types.split(",") if t]
+            similar_group_codes = [t for t in similar_group_codes.split(",") if t]
+
+            filter = Filter(
+                registerStatus=register_status,
+                tmDivisionCode=tm_division_code,
+                productTypes=product_types,
+                similarGroupCodes=similar_group_codes,
+            ).to_dict()
+
+            trademarks = asyncio.run(
+                search_text_async(
+                    env.endpoint,
+                    text=text,
+                    k=k,
+                    filter=filter,
+                )
+            )
+
+            st.header("Results")
+            display_trademarks(trademarks)
 
 
 if __name__ == "__main__":
-    run()
+    main()
